@@ -1,13 +1,12 @@
 name: Deploy game to GitHub Pages
 
-# This publishes the game to a web address you can open on your phone.
-# It runs automatically whenever the game files change on these branches.
+# Optional: this can publish the game using the "GitHub Actions" Pages source.
+# The simplest setup (see README) is "Deploy from a branch", which does NOT
+# need this workflow. To avoid failed runs when Pages isn't set to the
+# "GitHub Actions" source, this only runs when you start it by hand from the
+# Actions tab (or if you switch the trigger back to "push").
 on:
-  push:
-    branches:
-      - main
-      - claude/game-for-son-6esv1t
-  workflow_dispatch:   # also lets you run it by hand from the Actions tab
+  workflow_dispatch:
 
 permissions:
   contents: read
