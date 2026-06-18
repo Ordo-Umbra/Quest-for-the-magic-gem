@@ -1,0 +1,42 @@
+name: Deploy game to GitHub Pages
+
+# This publishes the game to a web address you can open on your phone.
+# It runs automatically whenever the game files change on these branches.
+on:
+  push:
+    branches:
+      - main
+      - claude/game-for-son-6esv1t
+  workflow_dispatch:   # also lets you run it by hand from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only keep the newest deploy running.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the files
+        uses: actions/checkout@v4
+
+      - name: Prepare for Pages
+        uses: actions/configure-pages@v5
+
+      - name: Package the website
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "."          # the whole repo root (index.html lives here)
+
+      - name: Publish
+        id: deployment
+        uses: actions/deploy-pages@v4
