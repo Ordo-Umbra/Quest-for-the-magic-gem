@@ -13,26 +13,26 @@ You have two easy options.
 
 ### Option A — Publish it to a web link (best for playing often)
 
-This makes a real web address you can open and bookmark on your phone. The
-project is set up to **turn publishing on by itself**, so usually you don't
-have to change any settings at all.
+This makes a real web address you can open and bookmark on your phone. You only
+have to do this setup **once**.
 
-1. After any change is saved, the game publishes automatically. Your web
-   address will be:
+1. On your phone, open this repo on **github.com**.
+2. Tap **Settings** → **Pages** (under "Code and automation").
+3. Under **Build and deployment → Source**, pick **Deploy from a branch**.
+4. Set **Branch** to `main` and the folder to `/ (root)`, then tap **Save**.
+5. Wait a minute or two, then refresh the **Pages** screen. You'll see your link:
 
    `https://ordo-umbra.github.io/quest-for-the-magic-gem/`
 
-2. Open that link on your phone, tap **"Add to Home Screen"** in your browser
-   menu, and now it works just like an app. 🎮
+6. Open that link, tap **"Add to Home Screen"** in your browser menu, and now
+   it works just like an app. 🎮
 
-**If the link doesn't work after a few minutes**, the auto-enable may have been
-blocked. Turn Pages on manually one time:
-   - On your phone, open this repo on **github.com**.
-   - Tap **Settings** → **Pages**.
-   - Under **Build and deployment → Source**, choose **GitHub Actions**.
-   - Then open the **Actions** tab, tap the latest run, and choose **Re-run**.
+After that, every change you save to the `main` branch shows up on the link
+automatically (give it a minute to update).
 
-Every time you save a change to the game, it re-publishes automatically.
+> **Tip:** There's also a "GitHub Actions" source option that uses the included
+> workflow in `.github/workflows/pages.yml`. It works too, but "Deploy from a
+> branch" above is the simplest and most reliable for this game.
 
 ### Option B — Quick preview without publishing
 
