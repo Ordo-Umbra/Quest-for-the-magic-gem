@@ -13,18 +13,24 @@ You have two easy options.
 
 ### Option A — Publish it to a web link (best for playing often)
 
-This makes a real web address you can open and bookmark on your phone.
+This makes a real web address you can open and bookmark on your phone. The
+project is set up to **turn publishing on by itself**, so usually you don't
+have to change any settings at all.
 
-1. On your phone, open this repository on **github.com** (or the GitHub app's website view).
-2. Tap **Settings** → **Pages** (under "Code and automation").
-3. Under **Build and deployment → Source**, choose **GitHub Actions**.
-4. That's it. Within a minute or two the game publishes itself. Come back to
-   the **Pages** screen and you'll see a link like:
+1. After any change is saved, the game publishes automatically. Your web
+   address will be:
 
    `https://ordo-umbra.github.io/quest-for-the-magic-gem/`
 
-5. Open that link on your phone, tap **"Add to Home Screen"** in your browser
+2. Open that link on your phone, tap **"Add to Home Screen"** in your browser
    menu, and now it works just like an app. 🎮
+
+**If the link doesn't work after a few minutes**, the auto-enable may have been
+blocked. Turn Pages on manually one time:
+   - On your phone, open this repo on **github.com**.
+   - Tap **Settings** → **Pages**.
+   - Under **Build and deployment → Source**, choose **GitHub Actions**.
+   - Then open the **Actions** tab, tap the latest run, and choose **Re-run**.
 
 Every time you save a change to the game, it re-publishes automatically.
 
