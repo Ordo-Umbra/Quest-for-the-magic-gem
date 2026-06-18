@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- These two lines make the game fit a phone screen nicely -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0d1322" />
+  <title>Quest for the Magic Gem</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      height: 100%;
+      background: #07101a;
+      overflow: hidden;
+      font-family: sans-serif;
+      touch-action: none;            /* stop the page from scrolling while playing */
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #wrap {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas#game {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      width: 100vw;
+      max-width: 100vw;
+      max-height: 100vh;
+      height: auto;
+      background: #0d1322;
+      display: block;
+    }
+
+    /* ---- on-screen controls (only really needed on phones) ---- */
+    .controls { position: fixed; bottom: 0; left: 0; right: 0; pointer-events: none; z-index: 10; }
+
+    #stick {
+      position: fixed;
+      left: 18px; bottom: 22px;
+      width: 130px; height: 130px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.10);
+      border: 2px solid rgba(255,255,255,0.22);
+      pointer-events: auto;
+      touch-action: none;
+    }
+    #knob {
+      position: absolute;
+      left: 50%; top: 50%;
+      width: 56px; height: 56px;
+      margin: -28px 0 0 -28px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.45);
+      border: 2px solid rgba(255,255,255,0.6);
+    }
+
+    .btn {
+      position: fixed;
+      width: 78px; height: 78px;
+      border-radius: 50%;
+      pointer-events: auto;
+      touch-action: none;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: bold; font-size: 22px; color: #fff;
+      border: 3px solid rgba(255,255,255,0.4);
+    }
+    .btn.pressed { transform: scale(0.92); filter: brightness(1.3); }
+    #btnA { right: 22px;  bottom: 96px; background: rgba(220,70,90,0.65); }   /* attack */
+    #btnB { right: 104px; bottom: 30px; background: rgba(70,140,220,0.65); }  /* talk  */
+    .btn small { position: absolute; bottom: -18px; font-size: 11px; color: rgba(255,255,255,0.7); font-weight: normal; }
+
+    /* Hide the touch controls when using a mouse/keyboard on a big screen */
+    @media (hover: hover) and (pointer: fine) {
+      #stick, .btn { opacity: 0.25; }
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="game"></canvas>
+  </div>
+
+  <div class="controls">
+    <div id="stick"><div id="knob"></div></div>
+    <div id="btnA" class="btn">⚔<small>attack</small></div>
+    <div id="btnB" class="btn">●<small>talk</small></div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
