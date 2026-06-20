@@ -18,6 +18,21 @@ const HUD_H = 40;         // space at the top for hearts & shards
 const W = COLS * TILE;            // play-area width  (480)
 const H = ROWS * TILE + HUD_H;    // full canvas height
 
+/* ------------------------- difficulty ----------------------------
+   Tweak these to make the game easier or harder for your hero.
+   Bigger hearts = more forgiving.  Smaller enemy numbers = gentler.
+   (The original, harder values are noted in the comments.)            */
+const TUNING = {
+  startHearts: 5,         // hearts you begin with                 (was 3)
+  hurtInvuln: 1.6,        // seconds of flashing safety after a hit (was 1.0)
+  knockback: 26,          // how far an enemy shoves you on a touch (was 0)
+  spawnGrace: 1.0,        // seconds of safety right after a door   (was 0)
+  slimeChaseSpeed: 34,    // slime speed while chasing you          (was 42)
+  slimeChaseRange: 120,   // how close before a slime notices you   (was 150)
+  batSpeed: 44,           // how fast a bat drifts toward you       (was 60)
+  batWaggle: 26,          // how wildly a bat swoops around          (was 40)
+};
+
 /* =====================================================================
    STORY & WORLD  --  change these to make the game your own!
    ===================================================================== */
@@ -84,7 +99,7 @@ const ROOMS = {
       "###############",
     ],
     npc: ["Elder", [
-      "Welcome home, " + STORY.heroName + "!",
+      "Welcome home, {hero}!",
       "Two shards still lie in the dungeons beyond the village.",
       "Left is the Verdant Hollow. Right is the Glimmering Grotto.",
       "Bring the shards back to the gem pedestal here, then touch it.",
@@ -250,6 +265,8 @@ let interactQueued = false;
 
 const keys = {};
 addEventListener("keydown", (e) => {
+  // ignore game keys while typing the hero's name
+  if (document.activeElement && document.activeElement.id === "nameInput") return;
   keys[e.key.toLowerCase()] = true;
   if ([" ", "j"].includes(e.key.toLowerCase())) attackQueued = true;
   if (["e", "k", "enter"].includes(e.key.toLowerCase())) interactQueued = true;
@@ -267,42 +284,54 @@ function readMovement() {
   return { x, y };
 }
 
-/* --------- touch joystick (left) + buttons (right) ---------------- */
+/* --------- floating touch joystick (left) + buttons (right) -------
+   You can touch ANYWHERE in the left zone; the joystick springs up
+   wherever your thumb lands. Much easier for little hands.            */
+const stickZone = document.getElementById("stickzone");
 const stick = document.getElementById("stick");
 const knob = document.getElementById("knob");
+const STICK_MAX = 55;            // how far the knob can slide from center
 let stickId = null, stickCx = 0, stickCy = 0;
 
-function startStick(id, cx, cy) { stickId = id; stickCx = cx; stickCy = cy; }
+// Show the stick centered on the finger and start tracking it.
+function startStick(id, px, py) {
+  stickId = id; stickCx = px; stickCy = py;
+  stick.style.left = (px - stick.offsetWidth / 2) + "px";
+  stick.style.top = (py - stick.offsetHeight / 2) + "px";
+  stick.style.bottom = "auto";
+}
 function moveStick(px, py) {
   let dx = px - stickCx, dy = py - stickCy;
-  const max = 45, len = Math.hypot(dx, dy) || 1;
-  const cl = Math.min(len, max);
+  const len = Math.hypot(dx, dy) || 1;
+  const cl = Math.min(len, STICK_MAX);
   const nx = (dx / len), ny = (dy / len);
   knob.style.transform = `translate(${nx * cl}px, ${ny * cl}px)`;
-  if (len > 10) { touchVec.x = nx; touchVec.y = ny; touchVec.active = true; }
+  if (len > 8) { touchVec.x = nx; touchVec.y = ny; touchVec.active = true; }
   else { touchVec.x = 0; touchVec.y = 0; touchVec.active = false; }
 }
 function endStick() {
   stickId = null;
   touchVec.x = 0; touchVec.y = 0; touchVec.active = false;
   knob.style.transform = "translate(0,0)";
+  // return the visual to its resting corner
+  stick.style.left = ""; stick.style.top = ""; stick.style.bottom = "";
 }
 
-stick.addEventListener("touchstart", (e) => {
+stickZone.addEventListener("touchstart", (e) => {
   e.preventDefault();
+  if (stickId !== null) return;          // already tracking one finger
   const t = e.changedTouches[0];
-  const r = stick.getBoundingClientRect();
-  startStick(t.identifier, r.left + r.width / 2, r.top + r.height / 2);
+  startStick(t.identifier, t.clientX, t.clientY);
   moveStick(t.clientX, t.clientY);
 }, { passive: false });
-stick.addEventListener("touchmove", (e) => {
+stickZone.addEventListener("touchmove", (e) => {
   e.preventDefault();
   for (const t of e.changedTouches) if (t.identifier === stickId) moveStick(t.clientX, t.clientY);
 }, { passive: false });
-stick.addEventListener("touchend", (e) => {
+stickZone.addEventListener("touchend", (e) => {
   for (const t of e.changedTouches) if (t.identifier === stickId) endStick();
 }, { passive: false });
-stick.addEventListener("touchcancel", endStick, { passive: false });
+stickZone.addEventListener("touchcancel", endStick, { passive: false });
 
 function bindButton(id, onPress) {
   const el = document.getElementById(id);
@@ -313,14 +342,68 @@ function bindButton(id, onPress) {
 bindButton("btnA", () => { attackQueued = true; });
 bindButton("btnB", () => { interactQueued = true; });
 
+/* ------------------------- hero name picker ----------------------- */
+const nameInput = document.getElementById("nameInput");
+try {
+  const savedName = localStorage.getItem("qmg_hero");
+  if (savedName) STORY.heroName = savedName;
+} catch (e) {}
+if (nameInput) {
+  nameInput.value = STORY.heroName;
+  // pressing Enter in the box starts the game
+  nameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); nameInput.blur(); if (game.state === "title") startGame(); }
+  });
+}
+function applyChosenName() {
+  if (!nameInput) return;
+  const typed = (nameInput.value || "").trim().replace(/\s+/g, " ").slice(0, 12);
+  STORY.heroName = typed || "Pip";
+  nameInput.value = STORY.heroName;
+  try { localStorage.setItem("qmg_hero", STORY.heroName); } catch (e) {}
+}
+
+/* ------------------------------ sound ----------------------------- */
+// Tiny built-in sound effects (no files needed) using the Web Audio API.
+let audioCtx = null;
+function audio() {
+  if (audioCtx === null) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) { audioCtx = false; }
+  }
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx || null;
+}
+function tone(freq, start, dur, type, vol) {
+  const ac = audio(); if (!ac) return;
+  const t0 = ac.currentTime + start;
+  const osc = ac.createOscillator();
+  const g = ac.createGain();
+  osc.type = type || "sine";
+  osc.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(vol || 0.08, t0 + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(g); g.connect(ac.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.03);
+}
+const SFX = {
+  shard()   { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, i * 0.09, 0.28, "triangle", 0.09)); },
+  essence() { tone(880, 0, 0.08, "square", 0.04); },
+  defeat()  { tone(330, 0, 0.12, "square", 0.05); tone(196, 0.05, 0.14, "square", 0.05); },
+  hurt()    { tone(150, 0, 0.18, "sawtooth", 0.06); },
+  gate()    { tone(440, 0, 0.10, "triangle", 0.06); tone(660, 0.09, 0.18, "triangle", 0.06); },
+  win()     { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.12, 0.45, "triangle", 0.09)); },
+};
+
 /* ------------------------------ state ----------------------------- */
 const game = {
   state: "title",          // title | play | dialog | win
   roomId: "hub",
   room: null,              // runtime copy of current room
   shards: 0,
-  maxHearts: 3,
-  hearts: 3,
+  maxHearts: TUNING.startHearts,
+  hearts: TUNING.startHearts,
   essence: 0,
   dialog: null,            // {lines:[], i:0, after:fn}
   flicker: 0,
@@ -384,6 +467,8 @@ function loadRoom(id, spawnTile) {
     player.x = spawnTile[0] * TILE + TILE / 2;
     player.y = spawnTile[1] * TILE + TILE / 2 + HUD_H;
   }
+  // brief safety so you don't walk straight into a hit when a room loads
+  player.hurtTime = Math.max(player.hurtTime, TUNING.spawnGrace);
   if (def.note) showToast(def.note);
 }
 
@@ -401,8 +486,8 @@ function updateEnemies(dt) {
     const dist = Math.hypot(dx, dy) || 1;
 
     if (e.kind === "slime") {
-      const chase = dist < 150;
-      const sp = chase ? 42 : 18;
+      const chase = dist < TUNING.slimeChaseRange;
+      const sp = chase ? TUNING.slimeChaseSpeed : 18;
       if (chase) { e.vx = (dx / dist) * sp; e.vy = (dy / dist) * sp; }
       else {
         // gentle wander
@@ -411,14 +496,14 @@ function updateEnemies(dt) {
       }
       moveCircle(e, e.vx * dt, e.vy * dt);
     } else { // bat: swoops in a sine pattern, drifts toward player
-      const sp = 60;
-      e.x += ((dx / dist) * sp + Math.cos(e.t * 4) * 40) * dt;
-      e.y += ((dy / dist) * sp + Math.sin(e.t * 4) * 40) * dt;
+      const sp = TUNING.batSpeed;
+      e.x += ((dx / dist) * sp + Math.cos(e.t * 4) * TUNING.batWaggle) * dt;
+      e.y += ((dy / dist) * sp + Math.sin(e.t * 4) * TUNING.batWaggle) * dt;
       clampToRoom(e);
     }
 
     // touch the hero -> damage
-    if (player.hurtTime <= 0 && dist < e.r + player.r - 2) hurtPlayer();
+    if (player.hurtTime <= 0 && dist < e.r + player.r - 2) hurtPlayer(e);
   }
   enemies = enemies.filter((e) => e.hp > 0);
 
@@ -529,7 +614,7 @@ function openAllGates() {
   for (let r = 0; r < ROWS; r++)
     for (let c = 0; c < COLS; c++)
       if (game.room.grid[r][c] === "g") { game.room.grid[r][c] = "."; changed = true; }
-  if (changed) for (let i = 0; i < 14; i++) sparkle(W / 2, HUD_H + TILE, "#ffe08a");
+  if (changed) { SFX.gate(); for (let i = 0; i < 14; i++) sparkle(W / 2, HUD_H + TILE, "#ffe08a"); }
 }
 
 /* ------------------------------ attack ---------------------------- */
@@ -560,7 +645,7 @@ function doAttack() {
       if (player.dir === "up") e.y -= k;
       if (player.dir === "down") e.y += k;
       clampToRoom(e);
-      if (e.hp <= 0) { for (let i = 0; i < 10; i++) sparkle(e.x, e.y, e.kind === "slime" ? "#7fe07f" : "#9aa6ff"); dropEssence(e.x, e.y); }
+      if (e.hp <= 0) { SFX.defeat(); for (let i = 0; i < 10; i++) sparkle(e.x, e.y, e.kind === "slime" ? "#7fe07f" : "#9aa6ff"); dropEssence(e.x, e.y); }
     }
   }
 }
@@ -570,16 +655,29 @@ function dropEssence(x, y) {
 }
 
 /* ----------------------------- damage ----------------------------- */
-function hurtPlayer() {
+function hurtPlayer(enemy) {
   game.hearts -= 1;
-  player.hurtTime = 1.0;
+  player.hurtTime = TUNING.hurtInvuln;
+  SFX.hurt();
+  // shove the hero away from whatever touched them, so they aren't pinned
+  if (enemy) {
+    const dx = player.x - enemy.x, dy = player.y - enemy.y;
+    const d = Math.hypot(dx, dy) || 1;
+    moveCircle(player, (dx / d) * TUNING.knockback, (dy / d) * TUNING.knockback);
+  }
   for (let i = 0; i < 10; i++) sparkle(player.x, player.y, "#ff7a7a");
   if (game.hearts <= 0) respawn();
 }
 function respawn() {
+  // show a gentle "Game Over" screen instead of snapping back to the village
+  game.state = "gameover";
+}
+function tryAgain() {
+  attackQueued = false; interactQueued = false;
   game.hearts = game.maxHearts;
+  game.state = "play";
   showToast("You wake up at the village...");
-  loadRoom("hub", [7, 8]);
+  loadRoom("hub", [7, 8]);   // your collected shards are kept
 }
 
 /* ---------------------------- triggers ---------------------------- */
@@ -594,6 +692,7 @@ function checkTriggers() {
   if (ch === "S" && !collectedShards[game.roomId]) {
     collectedShards[game.roomId] = true;
     game.shards += 1;
+    SFX.shard();
     const c = Math.floor(player.x / TILE), r = Math.floor((player.y - HUD_H) / TILE);
     game.room.grid[r][c] = ".";
     save();
@@ -609,7 +708,7 @@ function checkTriggers() {
   // pickups
   for (const p of pickups) {
     if (Math.hypot(p.x - player.x, p.y - player.y) < player.r + p.r) {
-      p.dead = true; game.essence += 1;
+      p.dead = true; game.essence += 1; SFX.essence();
     }
   }
   pickups = pickups.filter((p) => !p.dead);
@@ -634,6 +733,7 @@ function doInteract() {
 function tryRestoreGem() {
   if (game.shards >= TOTAL_SHARDS) {
     game.state = "win";
+    SFX.win();
     startDialog(STORY.win, () => { game.state = "win"; });
   } else {
     startDialog([
@@ -645,7 +745,9 @@ function tryRestoreGem() {
 
 /* ----------------------------- dialog ----------------------------- */
 function startDialog(lines, after) {
-  game.dialog = { lines, i: 0, after: after || null };
+  // swap {hero} for the chosen name so dialog greets the player by name
+  const hero = STORY.heroName || "Pip";
+  game.dialog = { lines: lines.map((l) => l.replace(/\{hero\}/g, hero)), i: 0, after: after || null };
   game.state = "dialog";
 }
 function advanceDialog() {
@@ -705,6 +807,39 @@ function draw() {
   if (toast) drawToast();
   if (game.dialog) drawDialog();
   else if (game.state === "win") drawWinScreen();
+  else if (game.state === "gameover") drawGameOver();
+}
+
+function drawGameOver() {
+  ctx.fillStyle = "rgba(8,12,20,0.82)";
+  ctx.fillRect(0, 0, W, H);
+  // a big dim heart to echo the HUD
+  ctx.save();
+  ctx.translate(W / 2, H / 2 - 58 + Math.sin(Date.now() / 350) * 4);
+  ctx.scale(2.6, 2.6);
+  drawHeart(0, 0, false);   // empty/dim heart
+  ctx.restore();
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#ff9aa6"; ctx.font = "bold 28px sans-serif";
+  ctx.fillText("Oh no!", W / 2, H / 2 + 6);
+  ctx.fillStyle = "#fff"; ctx.font = "14px sans-serif";
+  ctx.fillText("You ran out of hearts.", W / 2, H / 2 + 36);
+  // a big friendly Try Again button (tapping anywhere also works)
+  const bw = 200, bh = 52, bx = W / 2 - bw / 2, by = H / 2 + 56;
+  ctx.fillStyle = "#3fa45a"; roundRect(bx, by, bw, bh, 12); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 2; roundRect(bx, by, bw, bh, 12); ctx.stroke();
+  ctx.fillStyle = "#fff"; ctx.font = "bold 20px sans-serif";
+  ctx.fillText("Try Again", W / 2, by + 34);
+  ctx.textAlign = "left";
+}
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 function drawWinScreen() {
@@ -974,10 +1109,13 @@ function drawTitle() {
 
 /* --------------------------- start game --------------------------- */
 function startGame() {
+  applyChosenName();   // lock in the hero's name from the title screen
+  audio();             // unlock sound on this first tap/click
   const s = loadSave();
   if (s) {
     game.shards = s.shards || 0;
-    game.maxHearts = s.maxHearts || 3;
+    // keep any bonus hearts from chests, but never below the friendly minimum
+    game.maxHearts = Math.max(s.maxHearts || 0, TUNING.startHearts);
     collectedShards = s.collected || {};
     openedChests = s.opened || {};
   }
@@ -987,17 +1125,19 @@ function startGame() {
   if (!s) startDialog(STORY.intro);
 }
 
-// tapping the canvas: start the game, or advance dialog
-canvas.addEventListener("pointerdown", () => {
+// tapping the screen: start the game, advance dialog, restart, etc.
+function handleTapAdvance() {
   if (game.state === "title") startGame();
   else if (game.dialog) advanceDialog();
+  else if (game.state === "gameover") tryAgain();
   else if (game.state === "win") {
     // finished the quest: clear progress and return to the title for a replay
     try { localStorage.removeItem("qmg_save"); } catch (e) {}
     game.shards = 0; collectedShards = {}; openedChests = {};
     game.state = "title";
   }
-});
+}
+canvas.addEventListener("pointerdown", handleTapAdvance);
 
 /* ----------------------------- main loop -------------------------- */
 let last = performance.now();
@@ -1016,7 +1156,16 @@ function loop(now) {
     // allow B button / keyboard to advance
     if (interactQueued || attackQueued) { interactQueued = false; attackQueued = false; advanceDialog(); }
     updateParticles(dt);
+  } else if (game.state === "gameover") {
+    // let the attack/talk buttons or spacebar restart too
+    if (interactQueued || attackQueued) { interactQueued = false; attackQueued = false; tryAgain(); }
   }
+
+  // the floating joystick only listens while you're actually playing
+  stickZone.style.pointerEvents = (game.state === "play") ? "auto" : "none";
+  // the name box only shows on the title screen
+  const nameBox = document.getElementById("nameBox");
+  if (nameBox) nameBox.style.display = (game.state === "title") ? "block" : "none";
 
   draw();
   requestAnimationFrame(loop);
