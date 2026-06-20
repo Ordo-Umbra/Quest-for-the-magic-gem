@@ -18,6 +18,21 @@ const HUD_H = 40;         // space at the top for hearts & shards
 const W = COLS * TILE;            // play-area width  (480)
 const H = ROWS * TILE + HUD_H;    // full canvas height
 
+/* ------------------------- difficulty ----------------------------
+   Tweak these to make the game easier or harder for your hero.
+   Bigger hearts = more forgiving.  Smaller enemy numbers = gentler.
+   (The original, harder values are noted in the comments.)            */
+const TUNING = {
+  startHearts: 5,         // hearts you begin with                 (was 3)
+  hurtInvuln: 1.6,        // seconds of flashing safety after a hit (was 1.0)
+  knockback: 26,          // how far an enemy shoves you on a touch (was 0)
+  spawnGrace: 1.0,        // seconds of safety right after a door   (was 0)
+  slimeChaseSpeed: 34,    // slime speed while chasing you          (was 42)
+  slimeChaseRange: 120,   // how close before a slime notices you   (was 150)
+  batSpeed: 44,           // how fast a bat drifts toward you       (was 60)
+  batWaggle: 26,          // how wildly a bat swoops around          (was 40)
+};
+
 /* =====================================================================
    STORY & WORLD  --  change these to make the game your own!
    ===================================================================== */
@@ -319,8 +334,8 @@ const game = {
   roomId: "hub",
   room: null,              // runtime copy of current room
   shards: 0,
-  maxHearts: 3,
-  hearts: 3,
+  maxHearts: TUNING.startHearts,
+  hearts: TUNING.startHearts,
   essence: 0,
   dialog: null,            // {lines:[], i:0, after:fn}
   flicker: 0,
@@ -384,6 +399,8 @@ function loadRoom(id, spawnTile) {
     player.x = spawnTile[0] * TILE + TILE / 2;
     player.y = spawnTile[1] * TILE + TILE / 2 + HUD_H;
   }
+  // brief safety so you don't walk straight into a hit when a room loads
+  player.hurtTime = Math.max(player.hurtTime, TUNING.spawnGrace);
   if (def.note) showToast(def.note);
 }
 
@@ -401,8 +418,8 @@ function updateEnemies(dt) {
     const dist = Math.hypot(dx, dy) || 1;
 
     if (e.kind === "slime") {
-      const chase = dist < 150;
-      const sp = chase ? 42 : 18;
+      const chase = dist < TUNING.slimeChaseRange;
+      const sp = chase ? TUNING.slimeChaseSpeed : 18;
       if (chase) { e.vx = (dx / dist) * sp; e.vy = (dy / dist) * sp; }
       else {
         // gentle wander
@@ -411,14 +428,14 @@ function updateEnemies(dt) {
       }
       moveCircle(e, e.vx * dt, e.vy * dt);
     } else { // bat: swoops in a sine pattern, drifts toward player
-      const sp = 60;
-      e.x += ((dx / dist) * sp + Math.cos(e.t * 4) * 40) * dt;
-      e.y += ((dy / dist) * sp + Math.sin(e.t * 4) * 40) * dt;
+      const sp = TUNING.batSpeed;
+      e.x += ((dx / dist) * sp + Math.cos(e.t * 4) * TUNING.batWaggle) * dt;
+      e.y += ((dy / dist) * sp + Math.sin(e.t * 4) * TUNING.batWaggle) * dt;
       clampToRoom(e);
     }
 
     // touch the hero -> damage
-    if (player.hurtTime <= 0 && dist < e.r + player.r - 2) hurtPlayer();
+    if (player.hurtTime <= 0 && dist < e.r + player.r - 2) hurtPlayer(e);
   }
   enemies = enemies.filter((e) => e.hp > 0);
 
@@ -570,9 +587,15 @@ function dropEssence(x, y) {
 }
 
 /* ----------------------------- damage ----------------------------- */
-function hurtPlayer() {
+function hurtPlayer(enemy) {
   game.hearts -= 1;
-  player.hurtTime = 1.0;
+  player.hurtTime = TUNING.hurtInvuln;
+  // shove the hero away from whatever touched them, so they aren't pinned
+  if (enemy) {
+    const dx = player.x - enemy.x, dy = player.y - enemy.y;
+    const d = Math.hypot(dx, dy) || 1;
+    moveCircle(player, (dx / d) * TUNING.knockback, (dy / d) * TUNING.knockback);
+  }
   for (let i = 0; i < 10; i++) sparkle(player.x, player.y, "#ff7a7a");
   if (game.hearts <= 0) respawn();
 }
@@ -977,7 +1000,8 @@ function startGame() {
   const s = loadSave();
   if (s) {
     game.shards = s.shards || 0;
-    game.maxHearts = s.maxHearts || 3;
+    // keep any bonus hearts from chests, but never below the friendly minimum
+    game.maxHearts = Math.max(s.maxHearts || 0, TUNING.startHearts);
     collectedShards = s.collected || {};
     openedChests = s.opened || {};
   }
