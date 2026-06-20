@@ -99,7 +99,7 @@ const ROOMS = {
       "###############",
     ],
     npc: ["Elder", [
-      "Welcome home, " + STORY.heroName + "!",
+      "Welcome home, {hero}!",
       "Two shards still lie in the dungeons beyond the village.",
       "Left is the Verdant Hollow. Right is the Glimmering Grotto.",
       "Bring the shards back to the gem pedestal here, then touch it.",
@@ -265,6 +265,8 @@ let interactQueued = false;
 
 const keys = {};
 addEventListener("keydown", (e) => {
+  // ignore game keys while typing the hero's name
+  if (document.activeElement && document.activeElement.id === "nameInput") return;
   keys[e.key.toLowerCase()] = true;
   if ([" ", "j"].includes(e.key.toLowerCase())) attackQueued = true;
   if (["e", "k", "enter"].includes(e.key.toLowerCase())) interactQueued = true;
@@ -339,6 +341,60 @@ function bindButton(id, onPress) {
 }
 bindButton("btnA", () => { attackQueued = true; });
 bindButton("btnB", () => { interactQueued = true; });
+
+/* ------------------------- hero name picker ----------------------- */
+const nameInput = document.getElementById("nameInput");
+try {
+  const savedName = localStorage.getItem("qmg_hero");
+  if (savedName) STORY.heroName = savedName;
+} catch (e) {}
+if (nameInput) {
+  nameInput.value = STORY.heroName;
+  // pressing Enter in the box starts the game
+  nameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); nameInput.blur(); if (game.state === "title") startGame(); }
+  });
+}
+function applyChosenName() {
+  if (!nameInput) return;
+  const typed = (nameInput.value || "").trim().replace(/\s+/g, " ").slice(0, 12);
+  STORY.heroName = typed || "Pip";
+  nameInput.value = STORY.heroName;
+  try { localStorage.setItem("qmg_hero", STORY.heroName); } catch (e) {}
+}
+
+/* ------------------------------ sound ----------------------------- */
+// Tiny built-in sound effects (no files needed) using the Web Audio API.
+let audioCtx = null;
+function audio() {
+  if (audioCtx === null) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) { audioCtx = false; }
+  }
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx || null;
+}
+function tone(freq, start, dur, type, vol) {
+  const ac = audio(); if (!ac) return;
+  const t0 = ac.currentTime + start;
+  const osc = ac.createOscillator();
+  const g = ac.createGain();
+  osc.type = type || "sine";
+  osc.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(vol || 0.08, t0 + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(g); g.connect(ac.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.03);
+}
+const SFX = {
+  shard()   { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, i * 0.09, 0.28, "triangle", 0.09)); },
+  essence() { tone(880, 0, 0.08, "square", 0.04); },
+  defeat()  { tone(330, 0, 0.12, "square", 0.05); tone(196, 0.05, 0.14, "square", 0.05); },
+  hurt()    { tone(150, 0, 0.18, "sawtooth", 0.06); },
+  gate()    { tone(440, 0, 0.10, "triangle", 0.06); tone(660, 0.09, 0.18, "triangle", 0.06); },
+  win()     { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.12, 0.45, "triangle", 0.09)); },
+};
 
 /* ------------------------------ state ----------------------------- */
 const game = {
@@ -558,7 +614,7 @@ function openAllGates() {
   for (let r = 0; r < ROWS; r++)
     for (let c = 0; c < COLS; c++)
       if (game.room.grid[r][c] === "g") { game.room.grid[r][c] = "."; changed = true; }
-  if (changed) for (let i = 0; i < 14; i++) sparkle(W / 2, HUD_H + TILE, "#ffe08a");
+  if (changed) { SFX.gate(); for (let i = 0; i < 14; i++) sparkle(W / 2, HUD_H + TILE, "#ffe08a"); }
 }
 
 /* ------------------------------ attack ---------------------------- */
@@ -589,7 +645,7 @@ function doAttack() {
       if (player.dir === "up") e.y -= k;
       if (player.dir === "down") e.y += k;
       clampToRoom(e);
-      if (e.hp <= 0) { for (let i = 0; i < 10; i++) sparkle(e.x, e.y, e.kind === "slime" ? "#7fe07f" : "#9aa6ff"); dropEssence(e.x, e.y); }
+      if (e.hp <= 0) { SFX.defeat(); for (let i = 0; i < 10; i++) sparkle(e.x, e.y, e.kind === "slime" ? "#7fe07f" : "#9aa6ff"); dropEssence(e.x, e.y); }
     }
   }
 }
@@ -602,6 +658,7 @@ function dropEssence(x, y) {
 function hurtPlayer(enemy) {
   game.hearts -= 1;
   player.hurtTime = TUNING.hurtInvuln;
+  SFX.hurt();
   // shove the hero away from whatever touched them, so they aren't pinned
   if (enemy) {
     const dx = player.x - enemy.x, dy = player.y - enemy.y;
@@ -635,6 +692,7 @@ function checkTriggers() {
   if (ch === "S" && !collectedShards[game.roomId]) {
     collectedShards[game.roomId] = true;
     game.shards += 1;
+    SFX.shard();
     const c = Math.floor(player.x / TILE), r = Math.floor((player.y - HUD_H) / TILE);
     game.room.grid[r][c] = ".";
     save();
@@ -650,7 +708,7 @@ function checkTriggers() {
   // pickups
   for (const p of pickups) {
     if (Math.hypot(p.x - player.x, p.y - player.y) < player.r + p.r) {
-      p.dead = true; game.essence += 1;
+      p.dead = true; game.essence += 1; SFX.essence();
     }
   }
   pickups = pickups.filter((p) => !p.dead);
@@ -675,6 +733,7 @@ function doInteract() {
 function tryRestoreGem() {
   if (game.shards >= TOTAL_SHARDS) {
     game.state = "win";
+    SFX.win();
     startDialog(STORY.win, () => { game.state = "win"; });
   } else {
     startDialog([
@@ -686,7 +745,9 @@ function tryRestoreGem() {
 
 /* ----------------------------- dialog ----------------------------- */
 function startDialog(lines, after) {
-  game.dialog = { lines, i: 0, after: after || null };
+  // swap {hero} for the chosen name so dialog greets the player by name
+  const hero = STORY.heroName || "Pip";
+  game.dialog = { lines: lines.map((l) => l.replace(/\{hero\}/g, hero)), i: 0, after: after || null };
   game.state = "dialog";
 }
 function advanceDialog() {
@@ -1048,6 +1109,8 @@ function drawTitle() {
 
 /* --------------------------- start game --------------------------- */
 function startGame() {
+  applyChosenName();   // lock in the hero's name from the title screen
+  audio();             // unlock sound on this first tap/click
   const s = loadSave();
   if (s) {
     game.shards = s.shards || 0;
@@ -1100,6 +1163,9 @@ function loop(now) {
 
   // the floating joystick only listens while you're actually playing
   stickZone.style.pointerEvents = (game.state === "play") ? "auto" : "none";
+  // the name box only shows on the title screen
+  const nameBox = document.getElementById("nameBox");
+  if (nameBox) nameBox.style.display = (game.state === "title") ? "block" : "none";
 
   draw();
   requestAnimationFrame(loop);
