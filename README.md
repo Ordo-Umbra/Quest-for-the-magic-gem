@@ -120,10 +120,3 @@ Here's the full key:
 Copy an existing room, change the letters to design your own layout, and add a
 new door + `exits` entry to connect it. Each room is exactly **15 letters wide
 and 11 rows tall**.
-
-When you and your son dream up new dungeons, enemies, or puzzles, just ask and
-we can keep building — that's the whole spirit of the outline. 🌟
-
----
-
-*Made with love. — Dad & Son*
