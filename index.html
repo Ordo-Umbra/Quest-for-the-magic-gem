@@ -40,24 +40,35 @@
     /* ---- on-screen controls (only really needed on phones) ---- */
     .controls { position: fixed; bottom: 0; left: 0; right: 0; pointer-events: none; z-index: 10; }
 
+    /* big invisible area: touch ANYWHERE here to grab the joystick.
+       This makes it much easier for small hands than aiming at one spot. */
+    #stickzone {
+      position: fixed;
+      left: 0; bottom: 0;
+      width: 58%; height: 80%;
+      pointer-events: auto;
+      touch-action: none;
+      z-index: 9;
+    }
     #stick {
       position: fixed;
-      left: 18px; bottom: 22px;
-      width: 130px; height: 130px;
+      left: 22px; bottom: 26px;
+      width: 150px; height: 150px;
       border-radius: 50%;
       background: rgba(255,255,255,0.10);
       border: 2px solid rgba(255,255,255,0.22);
-      pointer-events: auto;
+      pointer-events: none;          /* the zone handles touches, not this */
       touch-action: none;
+      z-index: 10;
     }
     #knob {
       position: absolute;
       left: 50%; top: 50%;
-      width: 56px; height: 56px;
-      margin: -28px 0 0 -28px;
+      width: 66px; height: 66px;
+      margin: -33px 0 0 -33px;
       border-radius: 50%;
-      background: rgba(255,255,255,0.45);
-      border: 2px solid rgba(255,255,255,0.6);
+      background: rgba(255,255,255,0.5);
+      border: 2px solid rgba(255,255,255,0.7);
     }
 
     .btn {
@@ -78,6 +89,7 @@
     /* Hide the touch controls when using a mouse/keyboard on a big screen */
     @media (hover: hover) and (pointer: fine) {
       #stick, .btn { opacity: 0.25; }
+      #stickzone { display: none; }
     }
   </style>
 </head>
@@ -87,6 +99,7 @@
   </div>
 
   <div class="controls">
+    <div id="stickzone"></div>
     <div id="stick"><div id="knob"></div></div>
     <div id="btnA" class="btn">⚔<small>attack</small></div>
     <div id="btnB" class="btn">●<small>talk</small></div>

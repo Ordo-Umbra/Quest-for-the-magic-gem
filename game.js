@@ -282,42 +282,54 @@ function readMovement() {
   return { x, y };
 }
 
-/* --------- touch joystick (left) + buttons (right) ---------------- */
+/* --------- floating touch joystick (left) + buttons (right) -------
+   You can touch ANYWHERE in the left zone; the joystick springs up
+   wherever your thumb lands. Much easier for little hands.            */
+const stickZone = document.getElementById("stickzone");
 const stick = document.getElementById("stick");
 const knob = document.getElementById("knob");
+const STICK_MAX = 55;            // how far the knob can slide from center
 let stickId = null, stickCx = 0, stickCy = 0;
 
-function startStick(id, cx, cy) { stickId = id; stickCx = cx; stickCy = cy; }
+// Show the stick centered on the finger and start tracking it.
+function startStick(id, px, py) {
+  stickId = id; stickCx = px; stickCy = py;
+  stick.style.left = (px - stick.offsetWidth / 2) + "px";
+  stick.style.top = (py - stick.offsetHeight / 2) + "px";
+  stick.style.bottom = "auto";
+}
 function moveStick(px, py) {
   let dx = px - stickCx, dy = py - stickCy;
-  const max = 45, len = Math.hypot(dx, dy) || 1;
-  const cl = Math.min(len, max);
+  const len = Math.hypot(dx, dy) || 1;
+  const cl = Math.min(len, STICK_MAX);
   const nx = (dx / len), ny = (dy / len);
   knob.style.transform = `translate(${nx * cl}px, ${ny * cl}px)`;
-  if (len > 10) { touchVec.x = nx; touchVec.y = ny; touchVec.active = true; }
+  if (len > 8) { touchVec.x = nx; touchVec.y = ny; touchVec.active = true; }
   else { touchVec.x = 0; touchVec.y = 0; touchVec.active = false; }
 }
 function endStick() {
   stickId = null;
   touchVec.x = 0; touchVec.y = 0; touchVec.active = false;
   knob.style.transform = "translate(0,0)";
+  // return the visual to its resting corner
+  stick.style.left = ""; stick.style.top = ""; stick.style.bottom = "";
 }
 
-stick.addEventListener("touchstart", (e) => {
+stickZone.addEventListener("touchstart", (e) => {
   e.preventDefault();
+  if (stickId !== null) return;          // already tracking one finger
   const t = e.changedTouches[0];
-  const r = stick.getBoundingClientRect();
-  startStick(t.identifier, r.left + r.width / 2, r.top + r.height / 2);
+  startStick(t.identifier, t.clientX, t.clientY);
   moveStick(t.clientX, t.clientY);
 }, { passive: false });
-stick.addEventListener("touchmove", (e) => {
+stickZone.addEventListener("touchmove", (e) => {
   e.preventDefault();
   for (const t of e.changedTouches) if (t.identifier === stickId) moveStick(t.clientX, t.clientY);
 }, { passive: false });
-stick.addEventListener("touchend", (e) => {
+stickZone.addEventListener("touchend", (e) => {
   for (const t of e.changedTouches) if (t.identifier === stickId) endStick();
 }, { passive: false });
-stick.addEventListener("touchcancel", endStick, { passive: false });
+stickZone.addEventListener("touchcancel", endStick, { passive: false });
 
 function bindButton(id, onPress) {
   const el = document.getElementById(id);
@@ -600,9 +612,15 @@ function hurtPlayer(enemy) {
   if (game.hearts <= 0) respawn();
 }
 function respawn() {
+  // show a gentle "Game Over" screen instead of snapping back to the village
+  game.state = "gameover";
+}
+function tryAgain() {
+  attackQueued = false; interactQueued = false;
   game.hearts = game.maxHearts;
+  game.state = "play";
   showToast("You wake up at the village...");
-  loadRoom("hub", [7, 8]);
+  loadRoom("hub", [7, 8]);   // your collected shards are kept
 }
 
 /* ---------------------------- triggers ---------------------------- */
@@ -728,6 +746,39 @@ function draw() {
   if (toast) drawToast();
   if (game.dialog) drawDialog();
   else if (game.state === "win") drawWinScreen();
+  else if (game.state === "gameover") drawGameOver();
+}
+
+function drawGameOver() {
+  ctx.fillStyle = "rgba(8,12,20,0.82)";
+  ctx.fillRect(0, 0, W, H);
+  // a big dim heart to echo the HUD
+  ctx.save();
+  ctx.translate(W / 2, H / 2 - 58 + Math.sin(Date.now() / 350) * 4);
+  ctx.scale(2.6, 2.6);
+  drawHeart(0, 0, false);   // empty/dim heart
+  ctx.restore();
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#ff9aa6"; ctx.font = "bold 28px sans-serif";
+  ctx.fillText("Oh no!", W / 2, H / 2 + 6);
+  ctx.fillStyle = "#fff"; ctx.font = "14px sans-serif";
+  ctx.fillText("You ran out of hearts.", W / 2, H / 2 + 36);
+  // a big friendly Try Again button (tapping anywhere also works)
+  const bw = 200, bh = 52, bx = W / 2 - bw / 2, by = H / 2 + 56;
+  ctx.fillStyle = "#3fa45a"; roundRect(bx, by, bw, bh, 12); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 2; roundRect(bx, by, bw, bh, 12); ctx.stroke();
+  ctx.fillStyle = "#fff"; ctx.font = "bold 20px sans-serif";
+  ctx.fillText("Try Again", W / 2, by + 34);
+  ctx.textAlign = "left";
+}
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 function drawWinScreen() {
@@ -1011,17 +1062,19 @@ function startGame() {
   if (!s) startDialog(STORY.intro);
 }
 
-// tapping the canvas: start the game, or advance dialog
-canvas.addEventListener("pointerdown", () => {
+// tapping the screen: start the game, advance dialog, restart, etc.
+function handleTapAdvance() {
   if (game.state === "title") startGame();
   else if (game.dialog) advanceDialog();
+  else if (game.state === "gameover") tryAgain();
   else if (game.state === "win") {
     // finished the quest: clear progress and return to the title for a replay
     try { localStorage.removeItem("qmg_save"); } catch (e) {}
     game.shards = 0; collectedShards = {}; openedChests = {};
     game.state = "title";
   }
-});
+}
+canvas.addEventListener("pointerdown", handleTapAdvance);
 
 /* ----------------------------- main loop -------------------------- */
 let last = performance.now();
@@ -1040,7 +1093,13 @@ function loop(now) {
     // allow B button / keyboard to advance
     if (interactQueued || attackQueued) { interactQueued = false; attackQueued = false; advanceDialog(); }
     updateParticles(dt);
+  } else if (game.state === "gameover") {
+    // let the attack/talk buttons or spacebar restart too
+    if (interactQueued || attackQueued) { interactQueued = false; attackQueued = false; tryAgain(); }
   }
+
+  // the floating joystick only listens while you're actually playing
+  stickZone.style.pointerEvents = (game.state === "play") ? "auto" : "none";
 
   draw();
   requestAnimationFrame(loop);
